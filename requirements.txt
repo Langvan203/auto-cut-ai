@@ -1,0 +1,9 @@
+# Auto Cut AI - Video Merging Tool
+#
+# Không cần cài thêm package Python (sử dụng thư viện built-in)
+# Yêu cầu: FFmpeg phải được cài đặt và có trong system PATH
+#
+# Cài FFmpeg:
+# - Windows: https://www.gyan.dev/ffmpeg/builds/ (tải bản full)
+# - macOS: brew install ffmpeg
+# - Linux: sudo apt install ffmpeg

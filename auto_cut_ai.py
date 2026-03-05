@@ -222,6 +222,7 @@ def merge_two_videos(
     ]
 
     # Cấu hình FPS và keyframe interval
+    # GOP = 2 × fps → keyframe mỗi 2 giây, tối ưu cho seeking và streaming
     if fps:
         cmd.extend(["-r", str(fps), "-g", str(fps * 2)])
 

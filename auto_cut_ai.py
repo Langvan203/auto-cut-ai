@@ -143,6 +143,7 @@ def merge_two_videos(
         "-map", "[vout]",
         "-map", "[aout]",
         "-c:v", "libx264",
+        "-pix_fmt", "yuv420p",
         "-c:a", "aac",
         "-movflags", "+faststart",
         output,

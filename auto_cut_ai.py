@@ -30,9 +30,17 @@ XFADE_EFFECTS = [
 
 VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".wmv", ".flv", ".webm"}
 
+# Cấu hình độ phân giải đầu ra
+RESOLUTION_OPTIONS = {
+    "Giữ nguyên": None,
+    "1080p (1920x1080)": (1920, 1080),
+    "2K (2560x1440)": (2560, 1440),
+    "4K (3840x2160)": (3840, 2160),
+}
+
 # Timeout constants (seconds)
 FFPROBE_TIMEOUT = 30
-FFMPEG_TIMEOUT = 600
+FFMPEG_TIMEOUT = 1800  # 30 phút — cần nhiều thời gian hơn khi xử lý video 4K
 
 
 def get_video_duration(video_path: str) -> float:
@@ -113,9 +121,11 @@ def merge_two_videos(
     transition: str,
     duration: float,
     log_callback,
+    resolution: tuple = None,
 ) -> None:
     """
     Ghép 2 video với hiệu ứng xfade + acrossfade.
+    resolution: tuple (width, height) hoặc None để giữ nguyên.
     """
     dur1 = get_video_duration(video1)
     offset = max(0.0, dur1 - duration)
@@ -125,11 +135,38 @@ def merge_two_videos(
         f" | transition={transition} | offset={offset:.3f}s"
     )
 
-    # Video filter: xfade
-    vf = (
-        f"[0:v][1:v]xfade=transition={transition}"
-        f":duration={duration}:offset={offset}[vout]"
-    )
+    if resolution:
+        w, h = resolution
+        log_callback(f"  Nâng chất lượng: {w}x{h}")
+        # Scale cả hai input lên cùng resolution trước khi xfade
+        # Sử dụng lanczos cho chất lượng upscale tốt nhất
+        # force_original_aspect_ratio=decrease + pad để tránh méo hình
+        scale_v0 = (
+            f"[0:v]scale={w}:{h}:flags=lanczos:"
+            f"force_original_aspect_ratio=decrease,"
+            f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black,"
+            f"setsar=1[v0]"
+        )
+        scale_v1 = (
+            f"[1:v]scale={w}:{h}:flags=lanczos:"
+            f"force_original_aspect_ratio=decrease,"
+            f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black,"
+            f"setsar=1[v1]"
+        )
+        # xfade giữa 2 video đã scale + unsharp để tăng độ nét
+        xfade_part = (
+            f"[v0][v1]xfade=transition={transition}"
+            f":duration={duration}:offset={offset},"
+            f"unsharp=5:5:0.5:5:5:0.5[vout]"
+        )
+        vf = f"{scale_v0};{scale_v1};{xfade_part}"
+    else:
+        # Không scale, chỉ xfade
+        vf = (
+            f"[0:v][1:v]xfade=transition={transition}"
+            f":duration={duration}:offset={offset}[vout]"
+        )
+
     # Audio filter: acrossfade
     af = (
         f"[0:a][1:a]acrossfade=d={duration}[aout]"
@@ -144,10 +181,17 @@ def merge_two_videos(
         "-map", "[aout]",
         "-c:v", "libx264",
         "-pix_fmt", "yuv420p",
+    ]
+
+    # Thêm cấu hình chất lượng khi nâng độ phân giải
+    if resolution:
+        cmd.extend(["-crf", "18", "-preset", "slow", "-b:a", "192k"])
+
+    cmd.extend([
         "-c:a", "aac",
         "-movflags", "+faststart",
         output,
-    ]
+    ])
 
     log_callback(f"  Lệnh FFmpeg: {' '.join(cmd)}")
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=FFMPEG_TIMEOUT)
@@ -165,10 +209,12 @@ def merge_video_group(
     duration: float,
     log_callback,
     progress_callback,
+    resolution: tuple = None,
 ) -> str:
     """
     Ghép tất cả video trong nhóm tuần tự.
     transitions: list N-1 tên hiệu ứng (tương ứng với N-1 đoạn nối).
+    resolution: tuple (width, height) hoặc None để giữ nguyên.
     Trả về đường dẫn file output.
     """
     import tempfile
@@ -193,7 +239,7 @@ def merge_video_group(
 
         merge_two_videos(
             current, next_video, output_path,
-            transition, duration, log_callback
+            transition, duration, log_callback, resolution
         )
         current = output_path
         progress_callback()
@@ -219,6 +265,7 @@ class AutoCutAI(tk.Tk):
         self._transition_vars: list[tk.StringVar] = []
         self._random_var = tk.BooleanVar(value=False)
         self._duration_var = tk.DoubleVar(value=1.0)
+        self._resolution_var = tk.StringVar(value="Giữ nguyên")
         self._input_var = tk.StringVar()
         self._output_var = tk.StringVar()
         self._is_processing = False
@@ -319,6 +366,22 @@ class AutoCutAI(tk.Tk):
             variable=self._random_var,
             command=self._on_random_toggle,
         ).grid(row=0, column=2, sticky="w", padx=20, pady=2)
+
+        ttk.Label(settings_frame, text="Độ phân giải đầu ra:").grid(
+            row=1, column=0, sticky="w", padx=4, pady=2
+        )
+        ttk.Combobox(
+            settings_frame,
+            textvariable=self._resolution_var,
+            values=list(RESOLUTION_OPTIONS.keys()),
+            state="readonly",
+            width=20,
+        ).grid(row=1, column=1, sticky="w", padx=4, pady=2)
+        ttk.Label(
+            settings_frame,
+            text="(Chọn 1080p/2K/4K để nâng cao chất lượng video)",
+            foreground="gray",
+        ).grid(row=1, column=2, sticky="w", padx=20, pady=2)
 
         # ── Progress + Nút bắt đầu ───────────────────────────────────
         action_frame = ttk.Frame(self)
@@ -485,6 +548,7 @@ class AutoCutAI(tk.Tk):
 
         duration = self._duration_var.get()
         use_random = self._random_var.get()
+        resolution = RESOLUTION_OPTIONS[self._resolution_var.get()]
 
         # Thu thập transitions cho từng nhóm
         groups_transitions: list[tuple[str, list, list]] = []
@@ -511,15 +575,17 @@ class AutoCutAI(tk.Tk):
         self._start_btn.configure(state="disabled")
         self._log("=" * 50)
         self._log("Bắt đầu ghép video...")
+        if resolution:
+            self._log(f"Độ phân giải đầu ra: {resolution[0]}x{resolution[1]}")
 
         thread = threading.Thread(
             target=self._merge_worker,
-            args=(groups_transitions, output_folder, duration),
+            args=(groups_transitions, output_folder, duration, resolution),
             daemon=True,
         )
         thread.start()
 
-    def _merge_worker(self, groups_transitions, output_folder, duration):
+    def _merge_worker(self, groups_transitions, output_folder, duration, resolution):
         errors = []
         for group_name, files, transitions in groups_transitions:
             self._log(f"\n▶ Đang ghép nhóm: {group_name}")
@@ -532,6 +598,7 @@ class AutoCutAI(tk.Tk):
                     duration=duration,
                     log_callback=self._log,
                     progress_callback=self._step_done,
+                    resolution=resolution,
                 )
                 self._log(f"✅ Hoàn thành: {out}")
             except Exception as exc:

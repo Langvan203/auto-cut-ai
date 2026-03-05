@@ -13,6 +13,8 @@
 
 **Auto Cut AI** là ứng dụng desktop (Python + Tkinter) giúp bạn tự động ghép nhiều đoạn video thành một video hoàn chỉnh với các hiệu ứng chuyển cảnh đẹp mắt, hoàn toàn miễn phí và không giới hạn.
 
+Hỗ trợ **nâng cao chất lượng video** lên 1080p, 2K hoặc 4K với bộ lọc làm sắc nét (unsharp) và thuật toán upscale Lanczos. Có thể **đóng gói thành file .exe** để chạy trực tiếp trên Windows.
+
 Ứng dụng tự động **nhận diện và nhóm** các file video cùng tên, sau đó ghép chúng lại theo thứ tự với hiệu ứng `xfade` của FFmpeg.
 
 ---
@@ -38,6 +40,7 @@
 │  └─────────────────────────────────────────────────────┘    │
 ├─────────────────────────────────────────────────────────────┤
 │  Thời gian transition: [1.0 ▲▼]  ☑ Random hiệu ứng         │
+│  Độ phân giải đầu ra:  [1080p (1920x1080) ▼]               │
 │  [████████████░░░░░░░░░] 60%        [▶ Bắt đầu ghép]       │
 ├─────────────────────────────────────────────────────────────┤
 │  Log xử lý:                                                 │
@@ -143,11 +146,16 @@ python auto_cut_ai.py
 
 Nhấn **🔍 Quét Video** — ứng dụng sẽ tự động phát hiện và nhóm các file video.
 
-### Bước 4: Cấu hình hiệu ứng
+### Bước 4: Cấu hình hiệu ứng & chất lượng
 
 - Với mỗi nhóm, chọn hiệu ứng transition cho từng đoạn nối bằng dropdown.
 - Hoặc tích chọn **Random hiệu ứng** để hệ thống tự chọn ngẫu nhiên.
 - Điều chỉnh **Thời gian transition** (mặc định 1.0 giây).
+- Chọn **Độ phân giải đầu ra** để nâng cao chất lượng video:
+  - **Giữ nguyên** — giữ resolution gốc.
+  - **1080p (1920×1080)** — Full HD.
+  - **2K (2560×1440)** — QHD.
+  - **4K (3840×2160)** — Ultra HD.
 
 ### Bước 5: Ghép video
 
@@ -208,6 +216,51 @@ output/
 
 ---
 
+## 🎯 Nâng cao chất lượng video
+
+Khi chọn độ phân giải đầu ra (1080p / 2K / 4K), ứng dụng sẽ tự động:
+
+1. **Upscale** video bằng thuật toán **Lanczos** — cho chất lượng upscale tốt nhất
+2. **Pad** letterbox tự động nếu tỉ lệ khung hình khác nhau (tránh méo hình)
+3. **Unsharp masking** — bộ lọc làm sắc nét để video rõ ràng hơn sau khi upscale
+4. **CRF 18 + preset slow** — chất lượng encoding cao (gần như lossless)
+5. **Audio 192kbps AAC** — âm thanh chất lượng cao
+
+| Độ phân giải | Kích thước | Ghi chú |
+|---|---|---|
+| Giữ nguyên | Theo video gốc | Không scale, không sharpen |
+| 1080p | 1920×1080 | Full HD, phù hợp đa số |
+| 2K | 2560×1440 | QHD, sắc nét hơn |
+| 4K | 3840×2160 | Ultra HD, chất lượng cao nhất |
+
+> **Lưu ý:** Video 4K sẽ tốn thời gian xử lý lâu hơn và dung lượng file lớn hơn đáng kể.
+
+---
+
+## 📦 Đóng gói thành file .exe
+
+Bạn có thể đóng gói ứng dụng thành một file `.exe` duy nhất để chạy trực tiếp trên Windows mà không cần cài Python.
+
+### 1. Cài đặt PyInstaller
+
+```bash
+pip install pyinstaller
+```
+
+### 2. Chạy script đóng gói
+
+```bash
+python build_exe.py
+```
+
+### 3. Kết quả
+
+File `AutoCutAI.exe` sẽ nằm trong thư mục `dist/`. Copy file này ra bất kỳ đâu để sử dụng.
+
+> **Lưu ý:** Máy chạy file `.exe` vẫn cần có **FFmpeg** đã cài đặt và có trong system PATH.
+
+---
+
 ## ❓ FAQ / Xử lý lỗi thường gặp
 
 ### ❌ `ffmpeg` không được nhận ra (not found)
@@ -253,7 +306,8 @@ output/
 ```
 auto-cut-ai/
 ├── auto_cut_ai.py    # Ứng dụng chính
-├── requirements.txt  # Không cần cài thêm package
+├── build_exe.py      # Script đóng gói thành file .exe
+├── requirements.txt  # Dependencies (pyinstaller cho đóng gói)
 ├── README.md         # Hướng dẫn này
 ├── LICENSE           # MIT License
 └── .gitignore

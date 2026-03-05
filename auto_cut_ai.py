@@ -205,6 +205,9 @@ def merge_two_videos(
     )
 
     # ── Lệnh FFmpeg với tối ưu chất lượng ────────────────────────
+    # Giới hạn số thread để tránh ngốn quá nhiều CPU
+    max_threads = max(1, (os.cpu_count() or 4) // 2)
+
     cmd = [
         "ffmpeg", "-y",
         "-i", video1,
@@ -217,8 +220,9 @@ def merge_two_videos(
         "-profile:v", "high",
         "-level:v", "4.2",
         "-crf", "18",
-        "-preset", "slow",
+        "-preset", "medium",
         "-bf", "2",
+        "-threads", str(max_threads),
     ]
 
     # Cấu hình FPS và keyframe interval
@@ -304,6 +308,7 @@ class AutoCutAI(tk.Tk):
         self.resizable(True, True)
 
         self._groups: dict = {}  # {group_name: [file_paths]}
+        self._order_vars: dict = {}  # {group_name: [tk.IntVar]} thứ tự video
         self._transition_vars: list[tk.StringVar] = []
         self._random_var = tk.BooleanVar(value=False)
         self._duration_var = tk.DoubleVar(value=1.0)
@@ -540,6 +545,7 @@ class AutoCutAI(tk.Tk):
         for widget in self._groups_frame.winfo_children():
             widget.destroy()
         self._transition_vars.clear()
+        self._order_vars.clear()
 
         if not self._groups:
             ttk.Label(
@@ -557,13 +563,26 @@ class AutoCutAI(tk.Tk):
             )
             grp_lf.pack(fill="x", padx=4, pady=3)
 
-            # Danh sách file
+            # Danh sách file với Spinbox chọn thứ tự
+            order_vars = []
             for i, fp in enumerate(files):
                 ttk.Label(
                     grp_lf,
                     text=f"  [{i}] {os.path.basename(fp)}",
                     foreground="#333",
                 ).grid(row=i, column=0, sticky="w", padx=4)
+
+                var = tk.IntVar(value=i + 1)
+                order_vars.append(var)
+                ttk.Spinbox(
+                    grp_lf,
+                    textvariable=var,
+                    from_=1,
+                    to=len(files),
+                    width=4,
+                ).grid(row=i, column=1, sticky="w", padx=4)
+
+            self._order_vars[group_name] = order_vars
 
             # Dropdown transition cho mỗi đoạn nối
             n_joins = len(files) - 1
@@ -636,6 +655,15 @@ class AutoCutAI(tk.Tk):
         groups_transitions: list[tuple[str, list, list]] = []
         var_idx = 0
         for group_name, files in self._groups.items():
+            # Sắp xếp lại video theo thứ tự người dùng chọn
+            if group_name in self._order_vars:
+                order_values = [v.get() for v in self._order_vars[group_name]]
+                ordered = sorted(
+                    zip(order_values, range(len(files)), files),
+                    key=lambda x: (x[0], x[1]),
+                )
+                files = [fp for _, _, fp in ordered]
+
             n_joins = len(files) - 1
             if use_random:
                 transitions = [random.choice(XFADE_EFFECTS) for _ in range(n_joins)]

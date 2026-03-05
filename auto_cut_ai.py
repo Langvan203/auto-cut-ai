@@ -40,7 +40,7 @@ RESOLUTION_OPTIONS = {
 
 # Timeout constants (seconds)
 FFPROBE_TIMEOUT = 30
-FFMPEG_TIMEOUT = 1800
+FFMPEG_TIMEOUT = 1800  # 30 phút — cần nhiều thời gian hơn khi xử lý video 4K
 
 
 def get_video_duration(video_path: str) -> float:

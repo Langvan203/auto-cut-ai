@@ -158,12 +158,11 @@ def merge_two_videos(
     if resolution:
         w, h = resolution
         log_callback(f"  Nâng chất lượng: {w}x{h}")
-        # Sử dụng lanczos cho chất lượng upscale tốt nhất
-        # force_original_aspect_ratio=decrease + pad để tránh méo hình
+        # Scale to fill + center-crop: no black borders
         scale_filter = (
-            f"scale={w}:{h}:flags=lanczos:"
-            f"force_original_aspect_ratio=decrease,"
-            f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black,"
+            f"scale='if(gt(a,{w}/{h}),-2,{w})':'if(gt(a,{w}/{h}),{h},-2)'"
+            f":flags=lanczos,"
+            f"crop={w}:{h},"
             f"setsar=1"
         )
         v0_filters.append(scale_filter)
